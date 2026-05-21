@@ -63,6 +63,7 @@ final class BackgroundSenderLogTest extends WebFrameworkTestCase
 
         $log = self::getAppErrorLog();
         $contents = \file_get_contents($log);
+        self::assertSame(1, \preg_match('/\[bgs\] Success while sending 1 \(size=[^)]+\) traces\. Total: 1, Received: 1, Sent: 1, Failed: 0\./', $contents));
         self::assertStringContains('[bgs] uploaded', $contents);
 
         // if this fails, our test may not be reliably clearing the log file
