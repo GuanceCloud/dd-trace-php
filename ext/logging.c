@@ -164,6 +164,10 @@ int ddtrace_log_with_time(int fd, const char *msg, int msg_len) {
     return ret;
 }
 
+bool ddtrace_bgs_log_result_enabled(void) {
+    return get_global_DD_TRACE_DEBUG() || get_global_DD_TRACE_DEBUG_CURL_OUTPUT();
+}
+
 #undef ddtrace_bgs_logf
 int ddtrace_bgs_logf(const char *fmt, ...) {
     int ret = 0;
@@ -176,8 +180,31 @@ int ddtrace_bgs_logf(const char *fmt, ...) {
         int needed_len = vsnprintf(NULL, 0, fmt, args_copy);
         va_end(args_copy);
 
-        char *msgbuf = malloc(needed_len);
-        vsnprintf(msgbuf, needed_len, fmt, args);
+        char *msgbuf = malloc(needed_len + 1);
+        vsnprintf(msgbuf, needed_len + 1, fmt, args);
+        va_end(args);
+
+        ret = ddtrace_log_with_time(error_log_fd, msgbuf, needed_len);
+
+        free(msgbuf);
+    }
+
+    return ret;
+}
+
+int ddtrace_bgs_logf_always(const char *fmt, ...) {
+    int ret = 0;
+    int error_log_fd = atomic_load(&ddtrace_error_log_fd);
+    if (error_log_fd != -1) {
+        va_list args, args_copy;
+        va_start(args, fmt);
+
+        va_copy(args_copy, args);
+        int needed_len = vsnprintf(NULL, 0, fmt, args_copy);
+        va_end(args_copy);
+
+        char *msgbuf = malloc(needed_len + 1);
+        vsnprintf(msgbuf, needed_len + 1, fmt, args);
         va_end(args);
 
         ret = ddtrace_log_with_time(error_log_fd, msgbuf, needed_len);

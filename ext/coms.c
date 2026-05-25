@@ -418,6 +418,7 @@ struct _writer_loop_data_t {
 
     _Atomic(bool) running, starting_up;
     _Atomic(pid_t) current_pid;
+    _Atomic(size_t) traces_received_total, traces_sent_total, traces_failed_total;
     _Atomic(bool) shutdown_when_idle, suspended, sending, allocate_new_stacks;
     _Atomic(uint32_t) flush_interval, request_counter, flush_processed_stacks_total, writer_cycle,
         requests_since_last_flush;
@@ -963,6 +964,50 @@ static size_t _dd_curl_writefunc(char *ptr, size_t size, size_t nmemb, void *s) 
     return size * nmemb;
 }
 
+static size_t _dd_payload_header_size(size_t trace_count) {
+    if (trace_count < 16) {
+        return 1;
+    } else if (trace_count < UINT16_MAX) {
+        return 3;
+    } else {
+        return 5;
+    }
+}
+
+static size_t _dd_payload_size_for_log(size_t trace_count, size_t grouped_bytes) {
+    size_t metadata_bytes = trace_count * sizeof(size_t) * 2;
+    size_t payload_bytes = grouped_bytes > metadata_bytes ? grouped_bytes - metadata_bytes : 0;
+    return payload_bytes + _dd_payload_header_size(trace_count);
+}
+
+static void _dd_format_payload_size(size_t payload_bytes, char *buffer, size_t buffer_len) {
+    if (payload_bytes < 1024) {
+        snprintf(buffer, buffer_len, "%zuB", payload_bytes);
+    } else if (payload_bytes < (1024 * 1024)) {
+        snprintf(buffer, buffer_len, "%.0fKB", (double) payload_bytes / 1024.0);
+    } else {
+        snprintf(buffer, buffer_len, "%.1fMB", (double) payload_bytes / (1024.0 * 1024.0));
+    }
+}
+
+static void _dd_bgs_log_send_result(struct _writer_loop_data_t *writer, bool success, size_t trace_count, size_t payload_bytes,
+                                    const char *detail) {
+    if (!ddtrace_bgs_log_result_enabled()) {
+        return;
+    }
+
+    char size_buffer[32];
+    _dd_format_payload_size(payload_bytes, size_buffer, sizeof size_buffer);
+
+    size_t received_total = atomic_load(&writer->traces_received_total);
+    size_t sent_total = atomic_load(&writer->traces_sent_total);
+    size_t failed_total = atomic_load(&writer->traces_failed_total);
+
+    ddtrace_bgs_logf_always("[bgs] %s while sending %zu (size=%s) traces. Total: %zu, Received: %zu, Sent: %zu, Failed: %zu.%s%s\n",
+                            success ? "Success" : "Failure", trace_count, size_buffer, received_total, received_total,
+                            sent_total, failed_total, detail ? " " : "", detail ? detail : "");
+}
+
 static void _dd_curl_send_stack(struct _writer_loop_data_t *writer, ddtrace_coms_stack_t *stack, trace_api_metrics *metrics) {
     if (!writer->curl) {
         ddtrace_bgs_logf("[bgs] no curl session - dropping the current stack.\n", NULL);
@@ -971,17 +1016,19 @@ static void _dd_curl_send_stack(struct _writer_loop_data_t *writer, ddtrace_coms
 
     void *read_data = _dd_init_read_userdata(stack);
     struct _grouped_stack_t *kData = read_data;
+    size_t trace_count = kData->total_groups;
+    size_t payload_bytes = _dd_payload_size_for_log(trace_count, kData->total_bytes);
+    atomic_fetch_add(&writer->traces_received_total, trace_count);
 
     int retries = MAX(get_global_DD_TRACE_AGENT_RETRIES(), 0) + 1;
     CURLcode res = CURLE_UNSUPPORTED_PROTOCOL; // Set a default value to avoid compiler warning
+    smart_str response = {0};
     for (int retry = 0; retry < retries; retry++) {
-        _dd_curl_set_headers(writer, kData->total_groups);
+        _dd_curl_set_headers(writer, trace_count);
         curl_easy_setopt(writer->curl, CURLOPT_READDATA, read_data);
         ddtrace_curl_set_hostname(writer->curl);
         ddtrace_curl_set_timeout(writer->curl);
         ddtrace_curl_set_connect_timeout(writer->curl);
-
-        smart_str response = {0};
 
         curl_easy_setopt(writer->curl, CURLOPT_UPLOAD, 1);
         curl_easy_setopt(writer->curl, CURLOPT_VERBOSE, (long) get_global_DD_TRACE_AGENT_DEBUG_VERBOSE_CURL());
@@ -990,7 +1037,9 @@ static void _dd_curl_send_stack(struct _writer_loop_data_t *writer, ddtrace_coms
         res = curl_easy_perform(writer->curl);
 
         if (res != CURLE_OK) {
-            ddtrace_bgs_logf("[bgs] curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            if (!ddtrace_bgs_log_result_enabled()) {
+                ddtrace_bgs_logf("[bgs] curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            }
 
             CURL *curl = writer->curl;
             writer->curl = NULL;
@@ -1039,6 +1088,7 @@ static void _dd_curl_send_stack(struct _writer_loop_data_t *writer, ddtrace_coms
     metrics->requests++;
     if (res == CURLE_OK) {
         long response_code = 0;
+        char detail[320];
         curl_easy_getinfo(writer->curl, CURLINFO_RESPONSE_CODE, &response_code);
         if (response_code >= 500) {
             metrics->responses_5xx++;
@@ -1055,10 +1105,36 @@ static void _dd_curl_send_stack(struct _writer_loop_data_t *writer, ddtrace_coms
             metrics->responses_1xx++;
             metrics->errors_status_code++;
         }
+
+        if (response_code >= 200 && response_code < 300) {
+            atomic_fetch_add(&writer->traces_sent_total, trace_count);
+            _dd_bgs_log_send_result(writer, true, trace_count, payload_bytes, NULL);
+        } else if (response.s && ZSTR_LEN(response.s) > 0) {
+            int preview_len = (int) MIN(ZSTR_LEN(response.s), 160);
+            snprintf(detail, sizeof detail, "HTTP %ld, body=%.*s", response_code, preview_len, ZSTR_VAL(response.s));
+            atomic_fetch_add(&writer->traces_failed_total, trace_count);
+            _dd_bgs_log_send_result(writer, false, trace_count, payload_bytes, detail);
+        } else {
+            snprintf(detail, sizeof detail, "HTTP %ld.", response_code);
+            atomic_fetch_add(&writer->traces_failed_total, trace_count);
+            _dd_bgs_log_send_result(writer, false, trace_count, payload_bytes, detail);
+        }
     } else if (res == CURLE_OPERATION_TIMEDOUT) {
         metrics->errors_timeout++;
+        char detail[160];
+        snprintf(detail, sizeof detail, "curl error after %d attempt(s): %s", retries, curl_easy_strerror(res));
+        atomic_fetch_add(&writer->traces_failed_total, trace_count);
+        _dd_bgs_log_send_result(writer, false, trace_count, payload_bytes, detail);
     } else {
         metrics->errors_network++;
+        char detail[160];
+        snprintf(detail, sizeof detail, "curl error after %d attempt(s): %s", retries, curl_easy_strerror(res));
+        atomic_fetch_add(&writer->traces_failed_total, trace_count);
+        _dd_bgs_log_send_result(writer, false, trace_count, payload_bytes, detail);
+    }
+
+    if (response.s) {
+        smart_str_free_ex(&response, true);
     }
 
     _dd_deinit_read_userdata(read_data);
