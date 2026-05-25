@@ -123,6 +123,35 @@ class AMQPIntegration extends Integration
         );
 
         trace_method(
+            'Magento\Framework\Amqp\Exchange',
+            'enqueue',
+            static function (SpanData $span, $args, $retval, $exception) {
+                $topic = isset($args[0]) ? (string) $args[0] : '';
+                $resourceDetail = $topic !== '' ? self::formatRoutingKey($topic) : null;
+
+                self::setGenericTags(
+                    $span,
+                    'enqueue',
+                    'producer',
+                    $resourceDetail,
+                    $exception
+                );
+                $span->meta[Tag::MQ_OPERATION] = 'send';
+
+                if ($topic !== '') {
+                    $span->meta[Tag::RABBITMQ_ROUTING_KEY] = self::formatRoutingKey($topic);
+                }
+
+                if (isset($args[1]) && \is_object($args[1]) && method_exists($args[1], 'getBody')) {
+                    $body = $args[1]->getBody();
+                    if (\is_string($body)) {
+                        $span->meta[Tag::MQ_MESSAGE_PAYLOAD_SIZE] = \strlen($body);
+                    }
+                }
+            }
+        );
+
+        trace_method(
             "PhpAmqpLib\Channel\AMQPChannel",
             "basic_publish",
             [
