@@ -1,9 +1,10 @@
 <?php
 
 $github_pat = $_ENV["GITHUB_RELEASE_PAT"];
-$target_branch = $_ENV["CI_COMMIT_BRANCH"] ?? "master";
-$repo_url = "https://github.com/DataDog/dd-trace-php";
-$api_base_url = "https://api.github.com/repos/DataDog/dd-trace-php";
+$target_branch = $_ENV["CI_COMMIT_BRANCH"] ?? $_ENV["GITHUB_REF_NAME"] ?? "master";
+$repository = $_ENV["RELEASE_GITHUB_REPOSITORY"] ?? $_ENV["GITHUB_REPOSITORY"] ?? "DataDog/dd-trace-php";
+$repo_url = "https://github.com/$repository";
+$api_base_url = "https://api.github.com/repos/$repository";
 
 if (!$github_pat) {
     fprintf(STDERR, "Error: GITHUB_RELEASE_PAT environment variable not set\n");
@@ -38,14 +39,14 @@ if (empty($files)) {
     exit(1);
 }
 
-function makeGithubRequest($url, $method, $data, $github_pat) {
+function makeGithubRequest($url, $method, $data, $github_pat, $repository) {
     $context = stream_context_create([
         'http' => [
             'method' => $method,
             'header' => [
                 "Authorization: token $github_pat",
                 "Accept: application/vnd.github+json",
-                "User-Agent: DataDog/dd-trace-php (create_release.php)",
+                "User-Agent: $repository (create_release.php)",
                 "Content-Type: application/json",
             ],
             'content' => $data ? is_array($data) ? json_encode($data) : $data : null,
@@ -78,7 +79,7 @@ $page = 1;
 $per_page = 100; // maximum allowed per page
 do {
     $url = "$api_base_url/releases?page=$page&per_page=$per_page";
-    $releases_list = makeGitHubRequest($url, 'GET', null, $github_pat);
+    $releases_list = makeGithubRequest($url, 'GET', null, $github_pat, $repository);
 
     foreach ($releases_list as $found_release) {
         if ($found_release['tag_name'] == $version) {
@@ -106,7 +107,7 @@ if (isset($release['id'])) {
     // Ensure to remove the old assets because github does not like overwriting...
     foreach ($release['assets'] ?? [] as $asset) {
         echo "Deleting existing asset: {$asset['name']}\n";
-        $response = makeGithubRequest("$api_base_url/releases/assets/{$asset['id']}", 'DELETE', null, $github_pat);
+        $response = makeGithubRequest("$api_base_url/releases/assets/{$asset['id']}", 'DELETE', null, $github_pat, $repository);
         if (isset($response['message'])) {
             fprintf(STDERR, "Error: Failed to delete asset\n");
             fprintf(STDERR, "GitHub API error: %s\n", $release['message']);
@@ -124,7 +125,7 @@ if (isset($release['id'])) {
         'draft' => true,
         'prerelease' => (bool) preg_match("([a-z])i", $version),
     ];
-    $release = makeGithubRequest("$api_base_url/releases", 'POST', $release_data, $github_pat);
+    $release = makeGithubRequest("$api_base_url/releases", 'POST', $release_data, $github_pat, $repository);
 
     if (!isset($release['id'])) {
         fprintf(STDERR, "Error: Failed to create release\n");
@@ -147,7 +148,7 @@ foreach ($files as $file_path) {
     }
 
     $upload_url = str_replace('{?name,label}', '?name=' . urlencode($filename), $release['upload_url']);
-    $response = makeGithubRequest($upload_url, 'POST', $file_contents, $github_pat);
+    $response = makeGithubRequest($upload_url, 'POST', $file_contents, $github_pat, $repository);
     if (isset($response['message'])) {
         fprintf(STDERR, "Error: Failed to upload file\n");
         fprintf(STDERR, "GitHub API error: %s\n", $response['message']);

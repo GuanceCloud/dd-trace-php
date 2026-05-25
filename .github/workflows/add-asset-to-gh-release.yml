@@ -18,8 +18,9 @@ jobs:
           curl -L -o packages.tar.gz $PACKAGES_URL
           tar -xvzf packages.tar.gz
           cd build/packages/
-          gh release upload -R DataDog/dd-trace-php --clobber $RELEASE *
+          gh release upload -R $REPOSITORY --clobber $RELEASE *
         env:
           PACKAGES_URL: ${{ inputs.packagesUrl }}
           RELEASE: ${{ inputs.releaseVersion }}
+          REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
