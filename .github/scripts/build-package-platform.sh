@@ -86,9 +86,9 @@ for version in "${all_versions[@]}"; do
     echo "Building tracing/appsec for PHP ${version} on ${architecture}/${host_os}"
     run_in_image "$version" ".gitlab/build-tracing.sh '$suffix'"
     if [[ "$host_os" == "linux-musl" ]]; then
-        run_in_image "$version" "apk add --no-cache cmake gcc g++ git python3 autoconf coreutils; .gitlab/build-appsec.sh '$suffix'"
+        run_in_image "$version" "apk add --no-cache cmake gcc g++ git python3 autoconf coreutils; rm -rf appsec/build appsec/build-zts; .gitlab/build-appsec.sh '$suffix'"
     else
-        run_in_image "$version" ".gitlab/build-appsec.sh '$suffix'"
+        run_in_image "$version" "rm -rf appsec/build appsec/build-zts; .gitlab/build-appsec.sh '$suffix'"
     fi
 done
 
