@@ -64,17 +64,6 @@ run_in_image() {
 
     image=$(printf "$image_template" "$version")
 
-    local setup_command
-
-    case "$host_os" in
-        linux-gnu)
-            setup_command='yum install -y file patchelf >/dev/null'
-            ;;
-        linux-musl)
-            setup_command='apk add --no-cache file patchelf >/dev/null'
-            ;;
-    esac
-
     docker run --rm \
         --platform "$docker_platform" \
         -e PHP_VERSION="$version" \
@@ -86,7 +75,7 @@ run_in_image() {
         -v "$workspace:/work" \
         -w /work \
         "$image" \
-        bash -lc "set -euo pipefail; touch \"\$BASH_ENV\"; git config --global --add safe.directory /work; $setup_command; $command"
+        bash -lc "set -euo pipefail; touch \"\$BASH_ENV\"; git config --global --add safe.directory /work; .github/scripts/prepare-package-image.sh; $command"
 }
 
 echo "Building shared sidecar and loader artifacts for ${architecture}/${host_os}"
