@@ -14,7 +14,10 @@ if [[ "${HOST_OS}" == "linux-musl" ]]; then
     make
 
   if ! command -v phpize >/dev/null 2>&1; then
-    apk add --no-cache php php-dev
+    apk add --no-cache php83 php83-dev
+    ln -sf /usr/bin/php83 /usr/bin/php
+    ln -sf /usr/bin/phpize83 /usr/bin/phpize
+    ln -sf /usr/bin/php-config83 /usr/bin/php-config
   fi
 fi
 
