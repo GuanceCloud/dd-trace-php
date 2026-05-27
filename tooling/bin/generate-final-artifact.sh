@@ -48,6 +48,15 @@ cp_with_dir() {
     cp $1 $2
 }
 
+copy_if_exists() {
+    local source=$1
+    local destination=$2
+
+    if [[ -f "$source" ]]; then
+        cp_with_dir "$source" "$destination"
+    fi
+}
+
 echo "Architectures: ${architectures[@]}"
 echo "Targets: ${targets[@]}"
 echo "PHP APIs: ${php_apis[@]}"
@@ -86,9 +95,9 @@ for architecture in "${architectures[@]}"; do
                     if [[ -f ${appsec_ext_path} ]]; then
                         appsec_base_dir=${tmp_folder_final}/dd-library-php/appsec
                         cp_with_dir ${appsec_ext_path} ${appsec_base_dir}/ext/$php_api/ddappsec${config}.${ext}
-                        cp_with_dir ./appsec_${architecture}/libddappsec-helper.so ${appsec_base_dir}/lib/libddappsec-helper.so
-                        cp_with_dir ./appsec_${architecture}/libddappsec-helper-rust.so ${appsec_base_dir}/lib/libddappsec-helper-rust.so
-                        cp_with_dir ./appsec_${architecture}/recommended.json ${appsec_base_dir}/etc/recommended.json
+                        copy_if_exists ./appsec_${architecture}/libddappsec-helper.so ${appsec_base_dir}/lib/libddappsec-helper.so
+                        copy_if_exists ./appsec_${architecture}/libddappsec-helper-rust.so ${appsec_base_dir}/lib/libddappsec-helper-rust.so
+                        copy_if_exists ./appsec_${architecture}/recommended.json ${appsec_base_dir}/etc/recommended.json
                     fi
 
                     echo "$release_version" > ${tmp_folder_final}/dd-library-php/VERSION
@@ -281,13 +290,13 @@ for architecture in "${architectures[@]}"; do
             if [[ $target == "linux-gnu" ]]; then
                 mkdir -p "${tmp_folder_final_gnu_appsec}/lib"
                 mkdir -p "${tmp_folder_final_gnu_appsec}/etc"
-                cp \
+                copy_if_exists \
                     "./appsec_${architecture}/libddappsec-helper.so" \
                     "${tmp_folder_final_gnu_appsec}/lib/libddappsec-helper.so"
-                cp \
+                copy_if_exists \
                     "./appsec_${architecture}/libddappsec-helper-rust.so" \
                     "${tmp_folder_final_gnu_appsec}/lib/libddappsec-helper-rust.so"
-                cp \
+                copy_if_exists \
                     "./appsec_${architecture}/recommended.json" \
                     "${tmp_folder_final_gnu_appsec}/etc/recommended.json"
             fi
@@ -295,13 +304,13 @@ for architecture in "${architectures[@]}"; do
             if [[ $target == "linux-musl" ]]; then
                 mkdir -p "${tmp_folder_final_musl_appsec}/lib"
                 mkdir -p "${tmp_folder_final_musl_appsec}/etc"
-                cp \
+                copy_if_exists \
                     "./appsec_${architecture}/libddappsec-helper.so" \
                     "${tmp_folder_final_musl_appsec}/lib/libddappsec-helper.so"
-                cp \
+                copy_if_exists \
                     "./appsec_${architecture}/libddappsec-helper-rust.so" \
                     "${tmp_folder_final_musl_appsec}/lib/libddappsec-helper-rust.so"
-                cp \
+                copy_if_exists \
                     "./appsec_${architecture}/recommended.json" \
                     "${tmp_folder_final_musl_appsec}/etc/recommended.json"
             fi

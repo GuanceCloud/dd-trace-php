@@ -81,13 +81,15 @@ run_in_image() {
 echo "Building shared sidecar and loader artifacts for ${architecture}/${host_os}"
 run_in_image "$bootstrap_version" ".gitlab/build-sidecar.sh '$suffix'"
 run_in_image "$bootstrap_version" ".gitlab/build-loader.sh"
-run_in_image "$bootstrap_version" ".gitlab/build-appsec-helper.sh"
-run_in_image "$bootstrap_version" ".gitlab/build-appsec-helper-rust.sh"
 
 for version in "${all_versions[@]}"; do
     echo "Building tracing/appsec for PHP ${version} on ${architecture}/${host_os}"
     run_in_image "$version" ".gitlab/build-tracing.sh '$suffix'"
-    run_in_image "$version" ".gitlab/build-appsec.sh '$suffix'"
+    if [[ "$host_os" == "linux-musl" ]]; then
+        run_in_image "$version" "apk add --no-cache cmake gcc g++ git python3 autoconf coreutils; .gitlab/build-appsec.sh '$suffix'"
+    else
+        run_in_image "$version" ".gitlab/build-appsec.sh '$suffix'"
+    fi
 done
 
 for version in "${profiler_versions[@]}"; do
