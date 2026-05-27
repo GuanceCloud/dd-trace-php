@@ -13,7 +13,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake/Modules")
 file(READ "../VERSION" appsec_version)
 string(STRIP "${appsec_version}" appsec_version)
 set(CMAKE_APPSEC_VERSION ${appsec_version})
-string(REGEX MATCH "^[^+a-z]*" appsec_short_version "${appsec_version}")
+# CMake project VERSION only accepts numeric dot-separated segments.
+# Keep the full version for runtime metadata, but strip any prerelease/build suffix.
+string(REGEX MATCH "^[0-9]+(\\.[0-9]+){0,3}" appsec_short_version "${appsec_version}")
 project(ddappsec VERSION ${appsec_short_version})
 
 include(CheckCXXCompilerFlag)
