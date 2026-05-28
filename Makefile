@@ -472,7 +472,7 @@ define FPM_FILES
 endef
 define FPM_OPTS
 	-a $(1) -n $(PACKAGE_NAME) -m dev@datadoghq.com --license "BSD 3-Clause License" --version $(VERSION) \
-		--provides $(PACKAGE_NAME) --vendor DataDog  --url "https://docs.datadoghq.com/tracing/setup/php/" --no-depends \
+		--provides $(PACKAGE_NAME) --vendor DataDog  --url "https://docs.datadoghq.com/tracing/setup/php/" --no-depends --force \
 		$(FPM_INFO_OPTS) $(FPM_DIR_OPTS) $(shell test $(1) = windows || echo --after-install=package/post-install.sh)
 endef
 
