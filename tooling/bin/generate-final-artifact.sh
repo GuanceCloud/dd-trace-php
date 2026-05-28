@@ -19,7 +19,7 @@ if [[ -z ${DDTRACE_MAKE_PACKAGES_ASAN:-} ]]; then
 fi
 
 targets=(unknown-linux-gnu alpine-linux-musl)
-if [[ -z ${DDTRACE_MAKE_PACKAGES_ASAN:-} ]]; then
+if [[ -z ${DDTRACE_MAKE_PACKAGES_ASAN:-} && -f ./extensions_x86_64/php_ddtrace-20170718.dll ]]; then
     targets+=(windows)
 fi
 
