@@ -103,8 +103,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: build-*
-          merge-multiple: true
-          path: ${{ github.workspace }}
+          merge-multiple: false
+          path: build/release-artifacts
           run-id: ${{ github.event.inputs.sourceRunId || github.run_id }}
           github-token: ${{ github.token }}
 
@@ -123,8 +123,58 @@ jobs:
 
       - name: Build package archives
         run: |
-          make packages
-          make calculate_package_sha256_sums
+          set -euo pipefail
+
+          rm -rf build/packages packages.tar.gz package_sha256sums
+
+          cleanup_build_inputs() {
+            rm -rf \
+              extensions_* \
+              standalone_* \
+              appsec_* \
+              datadog-profiling \
+              libddtrace_php_* \
+              ddtrace_*.ldflags \
+              dd_library_loader-*.so
+          }
+
+          restore_artifact() {
+            local artifact_name=$1
+
+            cleanup_build_inputs
+            cp -a "build/release-artifacts/${artifact_name}/." .
+          }
+
+          package_platform() {
+            local artifact_name=$1
+            local triplet=$2
+            shift 2
+
+            restore_artifact "$artifact_name"
+            TRIPLET="$triplet" make -j 4 "$@"
+            TRIPLET="$triplet" bash ./tooling/bin/generate-final-artifact.sh \
+              "$(cat VERSION)" \
+              "build/packages" \
+              "${GITHUB_WORKSPACE}"
+          }
+
+          make build/packages
+          make build/packages/datadog-setup.php
+
+          package_platform build-x86_64-musl x86_64-alpine-linux-musl .apk.x86_64
+          package_platform build-aarch64-musl aarch64-alpine-linux-musl .apk.aarch64
+          package_platform build-x86_64-gnu x86_64-unknown-linux-gnu .rpm.x86_64 .deb.x86_64 .tar.gz.x86_64
+          package_platform build-aarch64-gnu aarch64-unknown-linux-gnu .rpm.arm64 .deb.arm64 .tar.gz.aarch64
+
+          cleanup_build_inputs
+          cp -a build/release-artifacts/build-x86_64-musl/. .
+          cp -a build/release-artifacts/build-aarch64-musl/. .
+          cp -a build/release-artifacts/build-x86_64-gnu/. .
+          cp -a build/release-artifacts/build-aarch64-gnu/. .
+          make ssi_packages
+
+          tar --use-compress-program=pigz --exclude='dd-library-php-ssi-*' -cf packages.tar.gz build/packages --owner=0 --group=0
+          (cd build/packages && find . -type f -exec sha256sum {} + > ../../package_sha256sums)
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
