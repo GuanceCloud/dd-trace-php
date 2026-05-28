@@ -16,4 +16,5 @@ if echo "${release_version}" | grep -qE '\+' && [ -n ${CI_JOB_ID:-} ]; then
   sed -ri "s|define\('RELEASE_URL_PREFIX'[^;]+|${replacement}|" "${packages_build_dir}/datadog-setup.php"
 else
   sed "s|@release_version@|${release_version}|g" ./datadog-setup.php > "${packages_build_dir}/datadog-setup.php"
+  sed -ri "s|https://github.com/DataDog/dd-trace-php|https://github.com/GuanceCloud/dd-trace-php|g" "${packages_build_dir}/datadog-setup.php"
 fi
