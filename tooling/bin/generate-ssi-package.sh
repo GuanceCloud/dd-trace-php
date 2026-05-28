@@ -41,6 +41,24 @@ function stripto() {
     )
 }
 
+function strip_if_exists() {
+    source=$1
+    target=$2
+
+    if [[ -f "$source" ]]; then
+        stripto "$source" "$target"
+    fi
+}
+
+function copy_if_exists() {
+    source=$1
+    target=$2
+
+    if [[ -f "$source" ]]; then
+        cp "$source" "$target"
+    fi
+}
+
 for architecture in "${architectures[@]}"; do
     root=$tmp_folder_final/$architecture/dd-library-php-ssi
     gnu=$root/linux-gnu
@@ -119,9 +137,9 @@ for architecture in "${architectures[@]}"; do
 
     # AppSec
     mkdir -p "${root}/appsec/lib" "${root}/appsec/etc"
-    stripto "./appsec_${architecture}/libddappsec-helper.so" "${root}/appsec/lib/libddappsec-helper.so"
-    stripto "./appsec_${architecture}/libddappsec-helper-rust.so" "${root}/appsec/lib/libddappsec-helper-rust.so"
-    cp "./appsec_${architecture}/recommended.json"  "${root}/appsec/etc/recommended.json"
+    strip_if_exists "./appsec_${architecture}/libddappsec-helper.so" "${root}/appsec/lib/libddappsec-helper.so"
+    strip_if_exists "./appsec_${architecture}/libddappsec-helper-rust.so" "${root}/appsec/lib/libddappsec-helper-rust.so"
+    copy_if_exists "./appsec_${architecture}/recommended.json"  "${root}/appsec/etc/recommended.json"
 
     ########################
     # Final archives
