@@ -77,7 +77,7 @@ class ElasticSearchIntegration extends Integration
         self::traceSimpleMethod('Elastic\Transport\Serializer\XmlSerializer', 'unserialize');
 
         // Endpoints
-        $hook = static function ($span, $args) {
+        $hook = function ($span, $args) {
             $span->name = "Elasticsearch.Endpoint.performRequest";
             $span->resource = 'performRequest';
             Integration::handleInternalSpanServiceName($span, self::NAME);
@@ -105,6 +105,12 @@ class ElasticSearchIntegration extends Integration
                 }
             } catch (\Exception $ex) {
             }
+
+            ElasticSearchCommon::enrichSpanWithInstanceInfo(
+                $span,
+                $this,
+                isset($uri) ? (string) $uri : null
+            );
         };
         \DDTrace\trace_method('Elastic\Elasticsearch\Client', 'sendRequest', $hook);
 

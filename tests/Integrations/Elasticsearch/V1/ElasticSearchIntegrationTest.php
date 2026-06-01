@@ -91,6 +91,9 @@ class ElasticSearchIntegrationTest extends IntegrationTestCase
                 Tag::COMPONENT => 'elasticsearch'
             ])->withChildren([
                 SpanAssertion::exists('Elasticsearch.Endpoint.performRequest', 'performRequest')
+                    ->withExactTags([
+                        Tag::TARGET_HOST => self::HOST7,
+                    ])
                     ->withChildren([
                         SpanAssertion::exists(
                             'Elasticsearch.Serializers.SmartSerializer.deserialize',

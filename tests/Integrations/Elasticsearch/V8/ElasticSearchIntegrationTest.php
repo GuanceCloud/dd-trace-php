@@ -507,6 +507,8 @@ class ElasticSearchIntegrationTest extends IntegrationTestCase
                         'elasticsearch.url' => '/my_index8/_search',
                         'elasticsearch.method' => 'POST',
                         'elasticsearch.body' => '{"query":{"match_all":{}}}',
+                        Tag::TARGET_HOST => 'elasticsearch7-integration',
+                        Tag::TARGET_PORT => '9200',
                         Tag::SPAN_KIND => 'client',
                         Tag::COMPONENT => 'elasticsearch'
                     ])->withChildren([

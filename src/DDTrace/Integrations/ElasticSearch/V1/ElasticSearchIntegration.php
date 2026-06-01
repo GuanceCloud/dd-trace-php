@@ -114,8 +114,14 @@ class ElasticSearchIntegration extends Integration
                 }
             } catch (\Exception $ex) {
             }
+
+            ElasticSearchCommon::enrichSpanWithInstanceInfo(
+                $span,
+                method_exists($this, 'getConnection') ? $this->getConnection() : $this,
+                $span->meta[Tag::ELASTICSEARCH_URL] ?? null
+            );
         });
-        \DDTrace\trace_method('Elasticsearch\Connections\Connection', 'performRequest', static function ($span, $args) {
+        \DDTrace\trace_method('Elasticsearch\Connections\Connection', 'performRequest', function ($span, $args) {
             $span->name = "Elasticsearch.Endpoint.performRequest";
             $span->resource = 'performRequest';
             Integration::handleInternalSpanServiceName($span, self::NAME);
@@ -130,6 +136,8 @@ class ElasticSearchIntegration extends Integration
             if ($recordBody && null !== $body = $args[3]) {
                 $span->meta[Tag::ELASTICSEARCH_BODY] = json_encode($body);
             }
+
+            ElasticSearchCommon::enrichSpanWithInstanceInfo($span, $this, $args[1]);
         });
 
         return Integration::LOADED;
