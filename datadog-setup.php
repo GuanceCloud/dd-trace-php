@@ -587,14 +587,18 @@ function install($options)
 
     // Appsec helper and rules
     if (file_exists($tmpArchiveAppsecRoot)) {
-        execute_or_exit(
-            "Cannot copy files from '$tmpArchiveAppsecLib' to '$installDir'",
-            (IS_WINDOWS ? "xcopy /s /e /y /g /b /o /h " : "cp -rf ") . escapeshellarg("$tmpArchiveAppsecLib") . ' ' . escapeshellarg($installDir)
-        );
-        execute_or_exit(
-            "Cannot copy files from '$tmpArchiveAppsecEtc' to '$installDir'",
-            (IS_WINDOWS ? "xcopy /s /e /y /g /b /o /h " : "cp -r ") . escapeshellarg("$tmpArchiveAppsecEtc") . ' ' . escapeshellarg($installDir)
-        );
+        if (file_exists($tmpArchiveAppsecLib)) {
+            execute_or_exit(
+                "Cannot copy files from '$tmpArchiveAppsecLib' to '$installDir'",
+                (IS_WINDOWS ? "xcopy /s /e /y /g /b /o /h " : "cp -rf ") . escapeshellarg("$tmpArchiveAppsecLib") . ' ' . escapeshellarg($installDir)
+            );
+        }
+        if (file_exists($tmpArchiveAppsecEtc)) {
+            execute_or_exit(
+                "Cannot copy files from '$tmpArchiveAppsecEtc' to '$installDir'",
+                (IS_WINDOWS ? "xcopy /s /e /y /g /b /o /h " : "cp -r ") . escapeshellarg("$tmpArchiveAppsecEtc") . ' ' . escapeshellarg($installDir)
+            );
+        }
     }
     $appSecRulesPath = $installDir . '/etc/recommended.json';
 
