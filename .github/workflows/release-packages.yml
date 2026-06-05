@@ -192,7 +192,7 @@ jobs:
           if [ -n "${{ github.event.inputs.releaseTag || '' }}" ]; then
             tag='${{ github.event.inputs.releaseTag }}'
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            tag='${GITHUB_REF_NAME}'
+            tag="${GITHUB_REF_NAME}"
           else
             tag="$(cat VERSION)"
           fi
