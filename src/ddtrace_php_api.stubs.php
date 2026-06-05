@@ -2240,6 +2240,7 @@ namespace DDTrace {
         const NETWORK_DESTINATION_NAME = 'network.destination.name';
         const TARGET_HOST = 'out.host';
         const TARGET_PORT = 'out.port';
+        const PEER_HOST = 'peer_host';
         const BYTES_OUT = 'net.out.bytes';
         const ANALYTICS_KEY = '_dd1.sr.eausr';
         const HOSTNAME = '_dd.hostname';
