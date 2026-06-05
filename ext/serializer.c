@@ -76,9 +76,17 @@ static void mpack_write_utf8_lossy_cstr(mpack_writer_t *writer, const char *str,
 #define KEY_SPAN_ID "span_id"
 #define KEY_PARENT_ID "parent_id"
 #define KEY_META_STRUCT "meta_struct"
+#define KEY_DD_EXT_VERSION "dd_ext_version"
 
 static int msgpack_write_zval(mpack_writer_t *writer, zval *trace, int level);
 static void serialize_meta_struct(mpack_writer_t *writer, zval *trace);
+
+static bool dd_is_internal_dd_ext_version_meta(ddog_CharSlice key, ddog_CharSlice value) {
+    return key.len == sizeof(KEY_DD_EXT_VERSION) - 1 &&
+           memcmp(key.ptr, KEY_DD_EXT_VERSION, sizeof(KEY_DD_EXT_VERSION) - 1) == 0 &&
+           value.len == sizeof(PHP_DDTRACE_VERSION) - 1 &&
+           memcmp(value.ptr, PHP_DDTRACE_VERSION, sizeof(PHP_DDTRACE_VERSION) - 1) == 0;
+}
 
 static int write_hash_table(mpack_writer_t *writer, HashTable *ht, int level) {
     zval *tmp;
@@ -436,6 +444,72 @@ static void dd_add_post_fields_to_meta_recursive(zend_array *meta, const char *t
     }
 }
 
+static zval *dd_find_content_type(zend_array *server) {
+    zval *content_type = zend_hash_str_find(server, ZEND_STRL("CONTENT_TYPE"));
+    if (content_type && Z_TYPE_P(content_type) == IS_STRING) {
+        return content_type;
+    }
+
+    content_type = zend_hash_str_find(server, ZEND_STRL("HTTP_CONTENT_TYPE"));
+    if (content_type && Z_TYPE_P(content_type) == IS_STRING) {
+        return content_type;
+    }
+
+    return NULL;
+}
+
+static bool dd_is_json_content_type(zend_array *server) {
+    zval *content_type = dd_find_content_type(server);
+    if (!content_type) {
+        return false;
+    }
+
+    const char *content_type_str = Z_STRVAL_P(content_type);
+    size_t content_type_len = Z_STRLEN_P(content_type);
+
+    if (content_type_len >= sizeof("application/json") - 1 &&
+        memcmp(content_type_str, "application/json", sizeof("application/json") - 1) == 0) {
+        return true;
+    }
+
+    return content_type_len >= sizeof("application/graphql+json") - 1 &&
+           memcmp(content_type_str, "application/graphql+json", sizeof("application/graphql+json") - 1) == 0;
+}
+
+static void dd_add_json_body_fields_to_meta(zend_array *meta, const char *type, zend_array *server,
+                                            zend_array *post_whitelist) {
+    if (!server || !post_whitelist || zend_hash_num_elements(post_whitelist) == 0 || !dd_is_json_content_type(server)) {
+        return;
+    }
+
+    php_stream *stream = php_stream_open_wrapper_ex("php://input", "rb", 0, NULL, NULL);
+    if (!stream) {
+        return;
+    }
+
+    zend_string *body = php_stream_copy_to_mem(stream, (ssize_t) PHP_STREAM_COPY_ALL, 0);
+    php_stream_close(stream);
+
+    if (!body || ZSTR_LEN(body) == 0) {
+        if (body) {
+            zend_string_release(body);
+        }
+        return;
+    }
+
+    zval decoded;
+    if (zai_json_decode_assoc_safe(&decoded, ZSTR_VAL(body), (int) ZSTR_LEN(body), 32, false) == SUCCESS) {
+        if (Z_TYPE(decoded) == IS_ARRAY) {
+            zend_string *empty = ZSTR_EMPTY_ALLOC();
+            dd_add_post_fields_to_meta_recursive(meta, type, empty, &decoded, post_whitelist, false);
+            zend_string_release(empty);
+        }
+        zai_json_dtor_pzval(&decoded);
+    }
+
+    zend_string_release(body);
+}
+
 void ddtrace_set_global_span_properties(ddtrace_span_data *span) {
     zend_array *meta = ddtrace_property_array(&span->property_meta);
     zend_array *global_tags = get_DD_TAGS();
@@ -704,12 +778,14 @@ static void dd_set_entrypoint_root_span_props(struct superglob_equiv *data, ddtr
         ZEND_HASH_FOREACH_END();
     }
 
-    if (data->post && zend_hash_num_elements(get_DD_TRACE_HTTP_POST_DATA_PARAM_ALLOWED())) {
+    if (data->post && zend_hash_num_elements(data->post) > 0 && zend_hash_num_elements(get_DD_TRACE_HTTP_POST_DATA_PARAM_ALLOWED())) {
         zval post_zv;
         ZVAL_ARR(&post_zv, data->post);
         zend_string *empty = ZSTR_EMPTY_ALLOC();
         dd_add_post_fields_to_meta_recursive(meta, "request", empty, &post_zv, get_DD_TRACE_HTTP_POST_DATA_PARAM_ALLOWED(), false);
         zend_string_release(empty);
+    } else {
+        dd_add_json_body_fields_to_meta(meta, "request", data->server, get_DD_TRACE_HTTP_POST_DATA_PARAM_ALLOWED());
     }
 }
 
@@ -1261,6 +1337,10 @@ static void _serialize_meta(ddog_SpanBytes *rust_span, ddtrace_span_data *span, 
             }
         }
         ZEND_HASH_FOREACH_END();
+    }
+
+    if (!ddog_has_span_meta_str(rust_span, KEY_DD_EXT_VERSION)) {
+        ddog_add_str_span_meta_str(rust_span, KEY_DD_EXT_VERSION, PHP_DDTRACE_VERSION);
     }
 
     zval *existing_env, new_env;
@@ -1984,6 +2064,10 @@ zval dd_serialize_rust_traces_to_zval(ddog_TracesBytes *traces) {
                     ddog_CharSlice key = meta_keys[k];
                     ddog_CharSlice value = ddog_get_span_meta(span, key);
 
+                    if (dd_is_internal_dd_ext_version_meta(key, value)) {
+                        continue;
+                    }
+
                     zval value_zv;
                     ZVAL_STR(&value_zv, dd_CharSlice_to_zend_string(value));
                     zend_hash_str_update(Z_ARR(meta_zv), key.ptr, key.len, &value_zv);
@@ -2233,4 +2317,3 @@ void ddtrace_serializer_startup()
 {
     ddtrace_user_req_add_listeners(&ser_user_req_listeners);
 }
-
