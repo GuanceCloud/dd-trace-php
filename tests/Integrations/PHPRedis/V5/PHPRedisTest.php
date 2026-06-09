@@ -156,6 +156,46 @@ class PHPRedisTest extends IntegrationTestCase
         ]);
     }
 
+    public function testCommandAfterConnectionStringWithSchemeAddsPeerHost()
+    {
+        $redis = new \Redis();
+        $host = 'tcp://' . $this->host;
+        $traces = $this->isolateTracer(function () use ($redis, $host) {
+            $redis->connect($host, $this->port);
+            $redis->set('k1', 'v1');
+        });
+        $redis->close();
+
+        $this->assertFlameGraph($traces, [
+            SpanAssertion::build(
+                "Redis.connect",
+                'phpredis',
+                'redis',
+                "Redis.connect"
+            )->withExactTags([
+                Tag::TARGET_HOST => $host,
+                Tag::PEER_HOST => $this->host,
+                'out.port' => $this->port,
+                Tag::SPAN_KIND => 'client',
+                Tag::COMPONENT => 'phpredis',
+                Tag::DB_SYSTEM => 'redis',
+            ]),
+            SpanAssertion::build(
+                "Redis.set",
+                'phpredis',
+                'redis',
+                "Redis.set"
+            )->withExactTags([
+                Tag::TARGET_HOST => $host,
+                Tag::PEER_HOST => $this->host,
+                'redis.raw_command' => 'set k1 v1',
+                Tag::SPAN_KIND => 'client',
+                Tag::COMPONENT => 'phpredis',
+                Tag::DB_SYSTEM => 'redis',
+            ]),
+        ]);
+    }
+
     /**
      * @dataProvider dataProviderTestConnectionError
      */
