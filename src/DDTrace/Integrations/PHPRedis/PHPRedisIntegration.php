@@ -406,6 +406,7 @@ class PHPRedisIntegration extends Integration
 
             $host = ObjectKVStore::get($this, PHPRedisIntegration::KEY_HOST);
             $span->meta[Tag::TARGET_HOST] = $host;
+            PHPRedisIntegration::setPeerHostTag($span, $host);
             $span->peerServiceSources = DatabaseIntegrationHelper::PEER_SERVICE_SOURCES;
         });
         \DDTrace\trace_method('RedisCluster', $method, function (SpanData $span, $args) use ($method) {

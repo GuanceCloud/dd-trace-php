@@ -421,7 +421,6 @@ static void dd_add_post_fields_to_meta_recursive(zend_array *meta, const char *t
                 // Here, both the postkey and postval are strings, so we can concatenate them into "<postkey>=<postval>"
                 zend_string *postvalstr = zval_get_string(postval);
                 zend_string *postvalconcat = zend_strpprintf(0, "%s=%s", ZSTR_VAL(postkey), ZSTR_VAL(postvalstr));
-                zend_string_release(postvalstr);
 
                 // Match it with the regex to redact if needed
                 if (zai_match_regex(get_DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP(), postvalconcat)) {
@@ -432,6 +431,7 @@ static void dd_add_post_fields_to_meta_recursive(zend_array *meta, const char *t
                     dd_add_post_fields_to_meta(meta, type, postkey, postvalstr);
                 }
                 zend_string_release(postvalconcat);
+                zend_string_release(postvalstr);
             } else { // No wildcard and the postkey isn't in the whitelist
                 // Always use "<redacted>" as the value
                 zend_string *replacement = zend_string_init(ZEND_STRL("<redacted>"), 0);
@@ -506,7 +506,7 @@ static void dd_add_json_body_fields_to_meta(zend_array *meta, const char *type, 
             dd_add_post_fields_to_meta_recursive(meta, type, empty, &decoded, post_whitelist, false);
             zend_string_release(empty);
         }
-        zai_json_dtor_pzval(&decoded);
+        zval_ptr_dtor(&decoded);
     }
 
     zend_string_release(body);
