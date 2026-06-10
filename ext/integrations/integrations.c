@@ -423,6 +423,14 @@ void ddtrace_integrations_minit(void) {
 
     DD_SET_UP_DEFERRED_LOADING_BY_METHOD(DDTRACE_INTEGRATION_PHPREDIS, "Redis", "__construct",
                                          "DDTrace\\Integrations\\PHPRedis\\PHPRedisIntegration");
+    DD_SET_UP_DEFERRED_LOADING_BY_METHOD(DDTRACE_INTEGRATION_PHPREDIS, "Redis", "connect",
+                                         "DDTrace\\Integrations\\PHPRedis\\PHPRedisIntegration");
+    DD_SET_UP_DEFERRED_LOADING_BY_METHOD(DDTRACE_INTEGRATION_PHPREDIS, "Redis", "pconnect",
+                                         "DDTrace\\Integrations\\PHPRedis\\PHPRedisIntegration");
+    DD_SET_UP_DEFERRED_LOADING_BY_METHOD(DDTRACE_INTEGRATION_PHPREDIS, "Redis", "open",
+                                         "DDTrace\\Integrations\\PHPRedis\\PHPRedisIntegration");
+    DD_SET_UP_DEFERRED_LOADING_BY_METHOD(DDTRACE_INTEGRATION_PHPREDIS, "Redis", "popen",
+                                         "DDTrace\\Integrations\\PHPRedis\\PHPRedisIntegration");
 
     DD_SET_UP_DEFERRED_LOADING_BY_METHOD(DDTRACE_INTEGRATION_PHPREDIS, "RedisCluster", "__construct",
                                          "DDTrace\\Integrations\\PHPRedis\\PHPRedisIntegration");

@@ -196,6 +196,51 @@ class PHPRedisTest extends IntegrationTestCase
         ]);
     }
 
+    public function testCommandAfterIpConnectionAddsTcpSchemeAndPeerHost()
+    {
+        $redis = new \Redis();
+        $ip = gethostbyname($this->host);
+        if ($ip === $this->host) {
+            $this->markTestSkipped('Redis integration hostname did not resolve to an IP address.');
+        }
+        $targetHost = 'tcp://' . $ip;
+
+        $traces = $this->isolateTracer(function () use ($redis, $ip) {
+            $redis->connect($ip, $this->port);
+            $redis->set('k1', 'v1');
+        });
+        $redis->close();
+
+        $this->assertFlameGraph($traces, [
+            SpanAssertion::build(
+                "Redis.connect",
+                'phpredis',
+                'redis',
+                "Redis.connect"
+            )->withExactTags([
+                Tag::TARGET_HOST => $targetHost,
+                Tag::PEER_HOST => $ip,
+                'out.port' => $this->port,
+                Tag::SPAN_KIND => 'client',
+                Tag::COMPONENT => 'phpredis',
+                Tag::DB_SYSTEM => 'redis',
+            ]),
+            SpanAssertion::build(
+                "Redis.set",
+                'phpredis',
+                'redis',
+                "Redis.set"
+            )->withExactTags([
+                Tag::TARGET_HOST => $targetHost,
+                Tag::PEER_HOST => $ip,
+                'redis.raw_command' => 'set k1 v1',
+                Tag::SPAN_KIND => 'client',
+                Tag::COMPONENT => 'phpredis',
+                Tag::DB_SYSTEM => 'redis',
+            ]),
+        ]);
+    }
+
     /**
      * @dataProvider dataProviderTestConnectionError
      */
