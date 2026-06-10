@@ -33,6 +33,23 @@ class PHPRedisIntegration extends Integration
     const INTERNAL_ONLY_TAG_CLUSTER_NAME = '_dd.cluster.name';
     const INTERNAL_ONLY_TAG_FIRST_HOST = '_dd.first.configured.host';
 
+    private static function normalizeTargetHost($hostOrUDS)
+    {
+        if (!\is_string($hostOrUDS) || $hostOrUDS === '') {
+            return $hostOrUDS;
+        }
+
+        if (\filter_var($hostOrUDS, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return 'tcp://' . $hostOrUDS;
+        }
+
+        if (\filter_var($hostOrUDS, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return 'tcp://[' . $hostOrUDS . ']';
+        }
+
+        return $hostOrUDS;
+    }
+
     private static function setPeerHostTag(SpanData $span, $hostOrUDS)
     {
         if (!\is_string($hostOrUDS) || $hostOrUDS === '') {
@@ -45,14 +62,41 @@ class PHPRedisIntegration extends Integration
         }
     }
 
+    private static function setTargetHostTags(SpanData $span, $instance, $allowInstanceLookup = true)
+    {
+        $host = ObjectKVStore::get($instance, self::KEY_HOST);
+        if (!\is_string($host) || $host === '') {
+            if (!$allowInstanceLookup || !\is_object($instance) || !\method_exists($instance, 'getHost')) {
+                return;
+            }
+
+            try {
+                $host = $instance->getHost();
+            } catch (\Throwable $e) {
+                return;
+            }
+
+            $host = self::normalizeTargetHost($host);
+            if (!\is_string($host) || $host === '') {
+                return;
+            }
+
+            ObjectKVStore::put($instance, self::KEY_HOST, $host);
+        }
+
+        $span->meta[Tag::TARGET_HOST] = $host;
+        self::setPeerHostTag($span, $host);
+    }
+
     public static function init(): int
     {
         $traceConnectOpen = function (SpanData $span, $args) {
             Integration::handleOrphan($span);
 
             $hostOrUDS = (isset($args[0]) && \is_string($args[0])) ? $args[0] : PHPRedisIntegration::DEFAULT_HOST;
-            $span->meta[Tag::TARGET_HOST] = $hostOrUDS;
-            PHPRedisIntegration::setPeerHostTag($span, $hostOrUDS);
+            $targetHost = PHPRedisIntegration::normalizeTargetHost($hostOrUDS);
+            $span->meta[Tag::TARGET_HOST] = $targetHost;
+            PHPRedisIntegration::setPeerHostTag($span, $targetHost);
             $span->meta[Tag::TARGET_PORT] = isset($args[1]) && \is_numeric($args[1]) ?
                 $args[1] :
                 PHPRedisIntegration::DEFAULT_PORT;
@@ -64,7 +108,7 @@ class PHPRedisIntegration extends Integration
             //   - in case of connection error, the Redis::host value is not set and we would not have access to it
             //     during callbacks, meaning that we would have to use two different ways to extract the name: args or
             //     Redis::getHost() depending on when we are interested in such information.
-            ObjectKVStore::put($this, PHPRedisIntegration::KEY_HOST, $hostOrUDS);
+            ObjectKVStore::put($this, PHPRedisIntegration::KEY_HOST, $targetHost);
 
             PHPRedisIntegration::enrichSpan($span, $this, 'Redis');
         };
@@ -131,9 +175,7 @@ class PHPRedisIntegration extends Integration
                 $span->meta['db.index'] = $args[0];
             }
 
-            $host = ObjectKVStore::get($this, PHPRedisIntegration::KEY_HOST);
-            $span->meta[Tag::TARGET_HOST] = $host;
-            PHPRedisIntegration::setPeerHostTag($span, $host);
+            PHPRedisIntegration::setTargetHostTags($span, $this);
             $span->peerServiceSources = DatabaseIntegrationHelper::PEER_SERVICE_SOURCES;
         });
 
@@ -375,9 +417,7 @@ class PHPRedisIntegration extends Integration
 
             PHPRedisIntegration::enrichSpan($span, $this, 'Redis', $method);
 
-            $host = ObjectKVStore::get($this, PHPRedisIntegration::KEY_HOST);
-            $span->meta[Tag::TARGET_HOST] = $host;
-            PHPRedisIntegration::setPeerHostTag($span, $host);
+            PHPRedisIntegration::setTargetHostTags($span, $this);
             $span->peerServiceSources = DatabaseIntegrationHelper::PEER_SERVICE_SOURCES;
         });
         \DDTrace\trace_method('RedisCluster', $method, function (SpanData $span, $args) use ($method) {
@@ -404,9 +444,7 @@ class PHPRedisIntegration extends Integration
             $span->meta[Tag::REDIS_RAW_COMMAND]
                 = empty($normalizedArgs) ? $method : ($method . ' ' . $normalizedArgs);
 
-            $host = ObjectKVStore::get($this, PHPRedisIntegration::KEY_HOST);
-            $span->meta[Tag::TARGET_HOST] = $host;
-            PHPRedisIntegration::setPeerHostTag($span, $host);
+            PHPRedisIntegration::setTargetHostTags($span, $this, $method !== 'getHost');
             $span->peerServiceSources = DatabaseIntegrationHelper::PEER_SERVICE_SOURCES;
         });
         \DDTrace\trace_method('RedisCluster', $method, function (SpanData $span, $args) use ($method) {
