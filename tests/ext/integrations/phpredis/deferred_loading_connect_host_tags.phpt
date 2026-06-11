@@ -32,7 +32,12 @@ $redis = new Redis();
 $redis->connect('172.18.0.4', 6379);
 $redis->set('k1', 'v1');
 
+$getHostSpans = 0;
 foreach (dd_trace_serialize_closed_spans() as $span) {
+    if (($span['name'] ?? null) === 'Redis.getHost') {
+        $getHostSpans++;
+    }
+
     if (($span['name'] ?? null) !== 'Redis.set') {
         continue;
     }
@@ -42,7 +47,10 @@ foreach (dd_trace_serialize_closed_spans() as $span) {
     echo 'peer_host=' . ($meta['peer_host'] ?? 'missing') . PHP_EOL;
 }
 
+echo 'getHost.spans=' . $getHostSpans . PHP_EOL;
+
 ?>
 --EXPECT--
 out.host=tcp://172.18.0.4
 peer_host=172.18.0.4
+getHost.spans=0

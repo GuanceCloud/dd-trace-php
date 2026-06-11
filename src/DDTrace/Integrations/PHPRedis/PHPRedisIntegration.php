@@ -33,7 +33,10 @@ class PHPRedisIntegration extends Integration
     const INTERNAL_ONLY_TAG_CLUSTER_NAME = '_dd.cluster.name';
     const INTERNAL_ONLY_TAG_FIRST_HOST = '_dd.first.configured.host';
 
-    private static function normalizeTargetHost($hostOrUDS)
+    /** @var int */
+    private static $suppressGetHostSpanDepth = 0;
+
+    public static function normalizeTargetHost($hostOrUDS)
     {
         if (!\is_string($hostOrUDS) || $hostOrUDS === '') {
             return $hostOrUDS;
@@ -50,7 +53,7 @@ class PHPRedisIntegration extends Integration
         return $hostOrUDS;
     }
 
-    private static function setPeerHostTag(SpanData $span, $hostOrUDS)
+    public static function setPeerHostTag(SpanData $span, $hostOrUDS)
     {
         if (!\is_string($hostOrUDS) || $hostOrUDS === '') {
             return;
@@ -62,7 +65,12 @@ class PHPRedisIntegration extends Integration
         }
     }
 
-    private static function setTargetHostTags(SpanData $span, $instance, $allowInstanceLookup = true)
+    public static function shouldSuppressGetHostSpan()
+    {
+        return self::$suppressGetHostSpanDepth > 0;
+    }
+
+    public static function setTargetHostTags(SpanData $span, $instance, $allowInstanceLookup = true)
     {
         $host = ObjectKVStore::get($instance, self::KEY_HOST);
         if (!\is_string($host) || $host === '') {
@@ -70,11 +78,14 @@ class PHPRedisIntegration extends Integration
                 return;
             }
 
+            self::$suppressGetHostSpanDepth++;
             try {
                 $host = $instance->getHost();
             } catch (\Throwable $e) {
+                self::$suppressGetHostSpanDepth--;
                 return;
             }
+            self::$suppressGetHostSpanDepth--;
 
             $host = self::normalizeTargetHost($host);
             if (!\is_string($host) || $host === '') {
@@ -436,6 +447,11 @@ class PHPRedisIntegration extends Integration
     public static function traceMethodAsCommand($method)
     {
         \DDTrace\trace_method('Redis', $method, function (SpanData $span, $args) use ($method) {
+            if ($method === 'getHost' && PHPRedisIntegration::shouldSuppressGetHostSpan()) {
+                \DDTrace\try_drop_span($span);
+                return;
+            }
+
             Integration::handleOrphan($span);
 
             PHPRedisIntegration::enrichSpan($span, $this, 'Redis', $method);
