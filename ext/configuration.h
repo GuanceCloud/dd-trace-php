@@ -166,6 +166,7 @@ enum ddtrace_sidecar_connection_mode {
     CONFIG(SET, DD_TRACE_RESOURCE_URI_QUERY_PARAM_ALLOWED, "")                                                 \
     CONFIG(SET, DD_TRACE_HTTP_URL_QUERY_PARAM_ALLOWED, "*")                                                    \
     CONFIG(SET, DD_TRACE_HTTP_POST_DATA_PARAM_ALLOWED, "")                                                     \
+    CONFIG(BOOL, DD_TRACE_HTTP_POST_DATA_RAW_ENABLED, "false")                                                 \
     CONFIG(INT, DD_TRACE_RATE_LIMIT, "100", .ini_change = zai_config_system_ini_change)                        \
     CONFIG(DOUBLE, DD_TRACE_SAMPLE_RATE, "-1", .ini_change = ddtrace_alter_DD_TRACE_SAMPLE_RATE,               \
            .env_config_fallback = ddtrace_conf_otel_sample_rate)                                               \
