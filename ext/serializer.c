@@ -478,15 +478,10 @@ static bool dd_is_json_content_type(zend_array *server) {
            memcmp(content_type_str, "application/graphql+json", sizeof("application/graphql+json") - 1) == 0;
 }
 
-static void dd_add_json_body_fields_to_meta(zend_array *meta, const char *type, zend_array *server,
-                                            zend_array *post_whitelist) {
-    if (!server || !post_whitelist || zend_hash_num_elements(post_whitelist) == 0 || !dd_is_json_content_type(server)) {
-        return;
-    }
-
+static zend_string *dd_read_raw_request_body(void) {
     php_stream *stream = php_stream_open_wrapper_ex("php://input", "rb", 0, NULL, NULL);
     if (!stream) {
-        return;
+        return NULL;
     }
 
     zend_string *body = php_stream_copy_to_mem(stream, (ssize_t) PHP_STREAM_COPY_ALL, 0);
@@ -496,17 +491,39 @@ static void dd_add_json_body_fields_to_meta(zend_array *meta, const char *type, 
         if (body) {
             zend_string_release(body);
         }
+        return NULL;
+    }
+
+    return body;
+}
+
+static void dd_add_json_body_fields_to_meta(zend_array *meta, const char *type, zend_array *server,
+                                            zend_array *post_whitelist) {
+    if (!server || !dd_is_json_content_type(server)) {
         return;
     }
 
-    zval decoded;
-    if (zai_json_decode_assoc_safe(&decoded, ZSTR_VAL(body), (int) ZSTR_LEN(body), 32, false) == SUCCESS) {
-        if (Z_TYPE(decoded) == IS_ARRAY) {
-            zend_string *empty = ZSTR_EMPTY_ALLOC();
-            dd_add_post_fields_to_meta_recursive(meta, type, empty, &decoded, post_whitelist, false);
-            zend_string_release(empty);
+    zend_string *body = dd_read_raw_request_body();
+    if (!body) {
+        return;
+    }
+
+    if (get_DD_TRACE_HTTP_POST_DATA_RAW_ENABLED()) {
+        zval request_body;
+        ZVAL_STR_COPY(&request_body, body);
+        zend_hash_str_update(meta, ZEND_STRL("request_body"), &request_body);
+    }
+
+    if (post_whitelist && zend_hash_num_elements(post_whitelist) > 0) {
+        zval decoded;
+        if (zai_json_decode_assoc_safe(&decoded, ZSTR_VAL(body), (int) ZSTR_LEN(body), 32, false) == SUCCESS) {
+            if (Z_TYPE(decoded) == IS_ARRAY) {
+                zend_string *empty = ZSTR_EMPTY_ALLOC();
+                dd_add_post_fields_to_meta_recursive(meta, type, empty, &decoded, post_whitelist, false);
+                zend_string_release(empty);
+            }
+            zval_ptr_dtor(&decoded);
         }
-        zval_ptr_dtor(&decoded);
     }
 
     zend_string_release(body);
