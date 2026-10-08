@@ -1,8 +1,8 @@
 # PHP response body 扩展交付与部署
 
-这是 GuanceCloud/dd-trace-php gtrace 分支上的开发验证版本：`1.20.7-gtrace-rc.1`，基于 `a09b326dd`。无需等待 Datadog 上游合并；由观测云构建、交付和维护。当前交付范围是 PHP 8.1、NTS、Linux x86_64、glibc，包含 tracer，不包含 profiler 和 AppSec。正式发布前需按客户业务镜像验证并固定版本。
+观测云发行版本为 `1.20.7-gtrace`，无需等待 Datadog 上游合并；由观测云构建、交付和维护。标准 Release 通过 GitHub Actions 远端构建，沿用历史版本的完整矩阵：PHP 7.0–8.5、x86_64/ARM64、glibc/musl、NTS/ZTS，以及历史支持的 GNU/Linux debug 变体。发布 ABI 独立包、平台汇总包、RPM/DEB/APK、系统安装 tar 包与 SSI 包；标准安装包包含对应矩阵支持的 AppSec 和 Profiler 组件。
 
-当前二进制在 PHP 8.1.34-FPM、Debian Trixie、glibc 2.41 中构建，ELF 至少需要 `GLIBC_2.39`，不能用于 Debian Bookworm 等更旧系统。随附 `Dockerfile.build` 固定了本次构建镜像 digest。客户镜像若系统库更旧，需要在匹配客户系统的构建环境中重新编译；不要为安装扩展直接替换客户原有基础系统。
+历史的本地 PHP 8.1 专项验证包与标准 Release 的构建环境、组件范围不同。本地 `Dockerfile.build` 和 `package-response-body.sh` 仍用于研发复现，生成的包只有 PHP 8.1 NTS、x86_64 tracer；若在 Debian Trixie 中构建，该包可能要求较新的 glibc。客户交付应使用标准 Release，并选择与现有业务镜像的架构、libc 和 PHP ABI 匹配的包。
 
 ## 功能与参数
 
@@ -25,15 +25,21 @@
 
 ## 客户部署
 
-1. 将压缩包、`datadog-setup.php`、`SHA256SUMS`、`Dockerfile` 和 FPM 配置放到同一目录。安装脚本已指向观测云 fork；使用 `--file` 离线安装，无需从 Datadog 下载。
-2. 将示例 Dockerfile 的 `PHP_BASE_IMAGE` 指向客户当前业务镜像。扩展必须匹配 PHP API `20210902`、NTS、x86_64 和 glibc；Alpine/musl、ARM64、ZTS 或其他 PHP 版本需重新构建。保留客户 Magento 所需的 PHP 模块、应用目录和启动参数。
+1. 从 `1.20.7-gtrace` Release 下载 `datadog-setup.php`。在线安装执行 `php datadog-setup.php --php-bin=all`，安装器会从观测云 fork 下载对应平台汇总包。离线安装则同时下载平台汇总包，并传入 `--file`；例如 x86_64 glibc 使用 `dd-library-php-1.20.7-gtrace-x86_64-linux-gnu.tar.gz`，Alpine 使用 `linux-musl`，ARM64 使用 `aarch64`。
+2. 将仓库内的示例 Dockerfile 和 FPM 配置、下载的压缩包与安装脚本放到同一目录。核对文件 SHA-256 与 GitHub Assets 提供的 digest 一致后，生成构建时复核用的 `SHA256SUMS`：
+
+```bash
+sha256sum dd-library-php-1.20.7-gtrace-x86_64-linux-gnu.tar.gz datadog-setup.php > SHA256SUMS
+```
+
+将示例 Dockerfile 的 `PHP_BASE_IMAGE` 指向客户当前业务镜像，并通过 `DDTRACE_ARCHIVE` 指定对应平台汇总包；安装器会根据实际 PHP ABI 和 NTS/ZTS/debug 自动选择扩展。保留客户 Magento 所需的 PHP 模块、应用目录和启动参数。
 3. 构建业务镜像：
 
 ```bash
 docker build --build-arg PHP_BASE_IMAGE=<客户原业务镜像> -t <业务镜像>:response-body .
 ```
 
-已有 ddtrace 应使用附带安装脚本替换，确认 INI 中只有一条有效的 `extension=ddtrace.so`。不要同时加载两个 ddtrace 扩展。当前包只有 tracer，不要加 `--enable-profiling` 或 `--enable-appsec`；如原环境启用了这些组件，先使用相同版本的完整组件构建验证。
+已有 ddtrace 应使用同版本安装脚本替换，确认 INI 中只有一条有效的 `extension=ddtrace.so`。不要同时加载两个 ddtrace 扩展。标准 Release 包含 AppSec/Profiler 组件；如客户原环境使用这些组件，保持相应启用配置，并在业务镜像中验证升级。
 
 4. 沿用原有观测云 DataKit 地址、服务名、环境名等配置。示例运行参数：
 
@@ -57,7 +63,9 @@ DataKit 需已开启 DDTrace 接收器，端口以实际配置为准。Kubernete
 
 ## 研发复现与发布
 
-在匹配客户 ABI/架构/libc 的 PHP 构建环境中，安装 PHP 开发工具、C/C++、Rust、CMake、libcurl 开发包等构建依赖。
+标准发布由 `.github/workflows/release-packages.yml` 在 GitHub Actions 远端执行。推送以 `-gtrace` 结尾的版本标签会自动触发，也可通过 `workflow_dispatch` 指定版本标签运行完整流程。正式发布沿用此流程生成完整 Assets。
+
+本地研发复现时，在匹配客户 ABI/架构/libc 的 PHP 构建环境中，安装 PHP 开发工具、C/C++、Rust、CMake、libcurl 开发包等构建依赖。以下打包脚本仅生成 PHP 8.1 NTS x86_64 glibc 的 tracer 专项验证包：
 
 ```bash
 git submodule update --init --recursive
@@ -71,4 +79,4 @@ bash tooling/bin/package-response-body.sh /absolute/output/directory
 python3 tests/integration/response_body/test_fpm.py
 ```
 
-测试同时检查实际 FastCGI 输出字节和发送给模拟 Agent 的 Trace 字段，覆盖默认关闭、开关、分段输出、缓冲处理、大小限制、黑白名单及冲突优先级、HEAD、压缩、错误状态和同 worker 请求隔离。正式交付需再在客户 Magento/Varnish 链路进行灰度验证。此版本作为观测云预发布包交付。正式稳定版本需完成对应客户镜像的灰度验收；后续升级继续选用观测云发行包。
+测试同时检查实际 FastCGI 输出字节和发送给模拟 Agent 的 Trace 字段，覆盖默认关闭、开关、分段输出、缓冲处理、大小限制、黑白名单及冲突优先级、HEAD、压缩、错误状态和同 worker 请求隔离。客户部署还需在实际 Magento/Varnish 链路进行灰度验证；后续升级继续选用观测云发行包。
