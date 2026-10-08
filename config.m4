@@ -208,6 +208,7 @@ if test "$PHP_DDTRACE" != "no"; then
     ext/profiling.c \
     ext/random.c \
     ext/remote_config.c \
+    ext/response_body.c \
     ext/serializer.c \
     ext/sidecar.c \
     ext/signals.c \

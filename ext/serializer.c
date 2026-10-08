@@ -53,6 +53,7 @@
 #include "sidecar.h"
 #include "span_stats.h"
 #include "trace_filter.h"
+#include "response_body.h"
 
 ZEND_EXTERN_MODULE_GLOBALS(ddtrace);
 
@@ -1427,6 +1428,7 @@ void transfer_metrics_data(ddog_SpanBytes *source, ddog_SpanBytes *destination, 
 }
 
 ddog_SpanBytes *ddtrace_serialize_span_to_rust_span(ddtrace_span_data *span, ddog_TraceBytes *trace) {
+    ddtrace_response_body_add_to_span(span);
     zend_array *meta = ddtrace_property_array(&span->property_meta);
     zend_array *metrics = ddtrace_property_array(&span->property_metrics);
 

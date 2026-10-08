@@ -72,6 +72,7 @@
 #include "random.h"
 #include "autoload_php_files.h"
 #include "remote_config.h"
+#include "response_body.h"
 #include "serializer.h"
 #include "sidecar.h"
 #ifndef _WIN32
@@ -1550,6 +1551,8 @@ static PHP_MINIT_FUNCTION(ddtrace) {
         return SUCCESS;
     }
 
+    ddtrace_response_body_minit();
+
 #if PHP_VERSION_ID >= 80100
     ddtrace_setup_fiber_observers();
 #endif
@@ -1606,6 +1609,8 @@ static PHP_MINIT_FUNCTION(ddtrace) {
 
 static PHP_MSHUTDOWN_FUNCTION(ddtrace) {
     UNUSED(module_number, type);
+
+    ddtrace_response_body_mshutdown();
 
     zai_uhook_mshutdown();
     zai_hook_mshutdown();
@@ -1777,6 +1782,7 @@ static void dd_initialize_request(void) {
     if (get_DD_TRACE_GENERATE_ROOT_SPAN()) {
         ddtrace_push_root_span();
     }
+    ddtrace_response_body_rinit();
 }
 
 static PHP_RINIT_FUNCTION(ddtrace) {
@@ -1925,6 +1931,8 @@ static PHP_RSHUTDOWN_FUNCTION(ddtrace) {
     } else if (!ddtrace_disable) {
         dd_shutdown_hooks_and_observer(fast_shutdown);
     }
+
+    ddtrace_response_body_rshutdown();
 
     if (DDTRACE_G(remote_config_state)) {
         ddtrace_rshutdown_remote_config();

@@ -168,6 +168,13 @@ ZEND_BEGIN_MODULE_GLOBALS(ddtrace)
     ddog_Vec_Tag active_global_tags;
 
     bool request_initialized;
+    bool response_body_capture;
+    bool response_body_headers_checked;
+    bool response_body_truncated;
+    char *response_body_buffer;
+    size_t response_body_length;
+    size_t response_body_limit;
+    uint64_t response_body_root_id;
     HashTable telemetry_spans_created_per_integration;
     ddog_SidecarActionsBuffer *telemetry_buffer;
     ddog_SidecarActionsBuffer *metrics_buffer;
