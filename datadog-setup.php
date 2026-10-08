@@ -2122,6 +2122,12 @@ function get_ini_settings($sourcesDir, $appsecHelperPath, $appsecRulesPath)
             'description' => 'Guance extension: response body limit in bytes, capped at 1048576. Zero disables capture.',
         ],
         [
+            'name' => 'datadog.trace.response_body_whitelist_urls',
+            'default' => '',
+            'commented' => true,
+            'description' => 'Guance extension: comma-separated allowed URL paths; empty allows all paths. A trailing * matches a prefix. Blacklist takes precedence.',
+        ],
+        [
             'name' => 'datadog.trace.auto_flush_enabled',
             'default' => 'Off',
             'commented' => true,

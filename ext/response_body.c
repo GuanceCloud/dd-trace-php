@@ -79,23 +79,13 @@ static bool dd_response_body_headers_supported(void) {
                            || dd_response_body_media_type(content_type, content_type_length, "text/plain"));
 }
 
-static bool dd_response_body_url_excluded(void) {
-    const char *uri = SG(request_info).request_uri;
-    /* FPM may rewrite request_info.request_uri to the script path. Use the
-     * original URI from _SERVER, as the HTTP span serializer does. */
-    zval *server = &PG(http_globals)[TRACK_VARS_SERVER];
-    if (Z_TYPE_P(server) == IS_ARRAY || zend_is_auto_global_str(ZEND_STRL("_SERVER"))) {
-        zval *original_uri = zend_hash_str_find(Z_ARRVAL_P(server), ZEND_STRL("REQUEST_URI"));
-        if (original_uri && Z_TYPE_P(original_uri) == IS_STRING) {
-            uri = Z_STRVAL_P(original_uri);
-        }
-    }
+static bool dd_response_body_url_matches(zend_array *patterns, const char *uri) {
     if (!uri) {
         return false;
     }
     size_t path_length = strcspn(uri, "?");
     zend_string *pattern;
-    ZEND_HASH_FOREACH_STR_KEY(get_DD_TRACE_RESPONSE_BODY_BLACKLIST_URLS(), pattern) {
+    ZEND_HASH_FOREACH_STR_KEY(patterns, pattern) {
         if (!pattern || !ZSTR_LEN(pattern)) {
             continue;
         }
@@ -110,6 +100,24 @@ static bool dd_response_body_url_excluded(void) {
         }
     } ZEND_HASH_FOREACH_END();
     return false;
+}
+
+static bool dd_response_body_url_excluded(void) {
+    const char *uri = SG(request_info).request_uri;
+    /* FPM may rewrite request_info.request_uri to the script path. Use the
+     * original URI from _SERVER, as the HTTP span serializer does. */
+    zval *server = &PG(http_globals)[TRACK_VARS_SERVER];
+    if (Z_TYPE_P(server) == IS_ARRAY || zend_is_auto_global_str(ZEND_STRL("_SERVER"))) {
+        zval *original_uri = zend_hash_str_find(Z_ARRVAL_P(server), ZEND_STRL("REQUEST_URI"));
+        if (original_uri && Z_TYPE_P(original_uri) == IS_STRING) {
+            uri = Z_STRVAL_P(original_uri);
+        }
+    }
+    if (dd_response_body_url_matches(get_DD_TRACE_RESPONSE_BODY_BLACKLIST_URLS(), uri)) {
+        return true;
+    }
+    zend_array *whitelist = get_DD_TRACE_RESPONSE_BODY_WHITELIST_URLS();
+    return zend_hash_num_elements(whitelist) > 0 && !dd_response_body_url_matches(whitelist, uri);
 }
 
 static size_t dd_response_body_write(const char *data, size_t length) {

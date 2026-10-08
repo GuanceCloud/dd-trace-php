@@ -257,7 +257,44 @@ def main():
                 'datadog.trace.response_body_enabled': 'On',
                 'datadog.trace.response_body_max_size': '5',
                 'datadog.trace.response_body_blacklist_urls': '/json'})
-        print('All 26 FastCGI response and trace checks passed.', flush=True)
+        run_pool('body-whitelist', agent_port, {
+            'DD_TRACE_RESPONSE_BODY_ENABLED': '1',
+            'DD_TRACE_RESPONSE_BODY_WHITELIST_URLS': ' /json, /api/* '}, [
+                case('/json?mode=1', chinese.encode(), chinese),
+                case('/api/v1', b'{"path":"\\/api\\/v1"}', '{"path":"\\/api\\/v1"}'),
+                case('/json-suffix', b'{"path":"\\/json-suffix"}'),
+                case('/api', b'{"path":"\\/api"}'),
+                case('/plain', b'plain response'),
+                case('/api/v2?query=1', b'{"path":"\\/api\\/v2"}', '{"path":"\\/api\\/v2"}'),
+                case('/JSON', b'{"path":"\\/JSON"}')])
+        run_pool('body-whitelist-empty', agent_port, {
+            'DD_TRACE_RESPONSE_BODY_ENABLED': '1', 'DD_TRACE_RESPONSE_BODY_WHITELIST_URLS': ''},
+                 [case('/plain', b'plain response', 'plain response')])
+        run_pool('body-whitelist-blacklist', agent_port, {
+            'DD_TRACE_RESPONSE_BODY_ENABLED': '1',
+            'DD_TRACE_RESPONSE_BODY_WHITELIST_URLS': '/json,/plain,/private/*',
+            'DD_TRACE_RESPONSE_BODY_BLACKLIST_URLS': '/json,/private/*'}, [
+                case('/json?token=1', chinese.encode()),
+                case('/private/test', b'{"path":"\\/private\\/test"}'),
+                case('/plain', b'plain response', 'plain response')])
+        run_pool('body-whitelist-ini', agent_port, {}, [
+            case('/plain', b'plain response', 'plain', 'true'),
+            case('/json', chinese.encode()),
+            case('/identity', b'{"ok":true}')], ini={
+                'datadog.trace.response_body_enabled': 'On',
+                'datadog.trace.response_body_max_size': '5',
+                'datadog.trace.response_body_whitelist_urls': '/json,/plain',
+                'datadog.trace.response_body_blacklist_urls': '/json'})
+        run_pool('body-whitelist-star', agent_port, {
+            'DD_TRACE_RESPONSE_BODY_ENABLED': '1',
+            'DD_TRACE_RESPONSE_BODY_WHITELIST_URLS': '*',
+            'DD_TRACE_RESPONSE_BODY_BLACKLIST_URLS': '/json'}, [
+                case('/json', chinese.encode()),
+                case('/plain', b'plain response', 'plain response')])
+        run_pool('body-whitelist-disabled', agent_port, {
+            'DD_TRACE_RESPONSE_BODY_ENABLED': '0', 'DD_TRACE_RESPONSE_BODY_WHITELIST_URLS': '*'},
+                 [case('/plain', b'plain response')])
+        print('All 43 FastCGI response and trace checks passed.', flush=True)
     finally:
         server.shutdown()
 
