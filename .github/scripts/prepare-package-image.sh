@@ -6,6 +6,9 @@ touch "${BASH_ENV}"
 
 case "${HOST_OS}" in
     linux-gnu)
+        # CentOS 7 archive repositories reject HTTP downloads. Keep the
+        # historical build baseline while using the supported HTTPS endpoint.
+        sed -i 's|http://vault.centos.org|https://vault.centos.org|g' /etc/yum.repos.d/*.repo
         yum install -y file patchelf >/dev/null
         ;;
     linux-musl)
