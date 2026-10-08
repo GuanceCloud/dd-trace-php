@@ -9,7 +9,18 @@ case "${HOST_OS}" in
         # CentOS 7 archive repositories reject HTTP downloads. Keep the
         # historical build baseline while using the supported HTTPS endpoint.
         sed -i 's|http://vault.centos.org|https://vault.centos.org|g' /etc/yum.repos.d/*.repo
-        yum install -y file patchelf >/dev/null
+        if ! yum install -y file patchelf >/dev/null; then
+            # Some legacy images receive 403 responses from the Vault CDN even
+            # over HTTPS. Use the same signed CentOS 7 packages on its archive
+            # mirror, and discard image-baked repository metadata before retrying.
+            sed -i \
+                -e 's|https\?://vault.centos.org|https://archive.kernel.org/centos-vault|g' \
+                -e 's#/altarch/\(\$releasever\|7\)/#/altarch/7.9.2009/#g' \
+                -e 's#centos-vault/\(centos/\)\?\(\$releasever\|7\)/#centos-vault/7.9.2009/#g' \
+                /etc/yum.repos.d/*.repo
+            yum clean all >/dev/null
+            yum install -y file patchelf >/dev/null
+        fi
         ;;
     linux-musl)
         apk add --no-cache file patchelf >/dev/null
