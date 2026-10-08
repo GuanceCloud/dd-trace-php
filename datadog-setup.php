@@ -2104,6 +2104,24 @@ function get_ini_settings($sourcesDir, $appsecHelperPath, $appsecRulesPath)
             'description' => 'Enable or disable tracing of CLI scripts. Off by default',
         ],
         [
+            'name' => 'datadog.trace.response_body_enabled',
+            'default' => 'Off',
+            'commented' => true,
+            'description' => 'Guance extension: capture JSON and plain-text HTTP response bodies on the root span.',
+        ],
+        [
+            'name' => 'datadog.trace.response_body_blacklist_urls',
+            'default' => '',
+            'commented' => true,
+            'description' => 'Guance extension: comma-separated excluded URL paths; a trailing * matches a path prefix.',
+        ],
+        [
+            'name' => 'datadog.trace.response_body_max_size',
+            'default' => '8192',
+            'commented' => true,
+            'description' => 'Guance extension: response body limit in bytes, capped at 1048576. Zero disables capture.',
+        ],
+        [
             'name' => 'datadog.trace.auto_flush_enabled',
             'default' => 'Off',
             'commented' => true,
